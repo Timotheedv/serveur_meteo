@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌤️ Dashboard Météo Live - WebSocket</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            background: linear-gradient(135deg, #74b9ff 0%, #0984e3 50%, #2d3436 100%);
+            color: #2d3436;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #00b894;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.disconnected {
+            background: #e17055;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .main-weather {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .weather-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .location {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .last-update {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .current-weather {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 20px;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .current-weather {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+        }
+
+        .weather-icon {
+            font-size: 80px;
+        }
+
+        .temperature-info {
+            text-align: center;
+        }
+
+        .temperature {
+            font-size: 72px;
+            font-weight: 300;
+            line-height: 1;
+        }
+
+        .description {
+            font-size: 18px;
+            opacity: 0.9;
+            text-transform: capitalize;
+            margin-top: 5px;
+        }
+
+        .feels-like {
+            font-size: 16px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .weather-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .detail-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .detail-label {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .detail-value {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .sidebar-panel {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .forecast-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .forecast-item:last-child {
+            border-bottom: none;
+        }
+
+        .forecast-time {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .forecast-temp {
+            font-weight: 600;
+        }
+
+        .alerts-container {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            background: rgba(231, 76, 60, 0.2);
+            border-left: 4px solid #e74c3c;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .alert-item.warning {
+            background: rgba(241, 196, 15, 0.2);
+            border-left-color: #f1c40f;
+        }
+
+        .alert-item.advisory {
+            background: rgba(52, 152, 219, 0.2);
+            border-left-color: #3498db;
+        }
+
+        .alert-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .alert-description {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: #00b894;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 20px;
+            font-size: 18px;
+            color: white;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            max-width: 400px;
+            z-index: 1000;
+        }
+
+        .notification {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            animation: slideInRight 0.3s ease;
+            border-left: 4px solid #00b894;
+        }
+
+        .notification.error {
+            border-left-color: #e74c3c;
+        }
+
+        .notification.warning {
+            border-left-color: #f39c12;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .sun-times {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .sun-time {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .error-message {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .location-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌤️ Dashboard Météo Live</h1>
+            <p>Données météorologiques en temps réel via WebSocket</p>
+            <div class="connection-status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="connectionStatus">Connexion...</span>
+                <span id="sessionInfo"></span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="refreshWeather()" id="refreshBtn">
+                🔄 Actualiser
+            </button>
+            <button class="btn" onclick="shareWeather()" id="shareBtn" disabled>
+                📤 Partager
+            </button>
+            <button class="btn" onclick="requestLocation()" id="locationBtn">
+                📍 Géolocalisation
+            </button>
+        </div>
+
+        <div id="loadingMessage" class="loading">
+            <div class="spinner"></div>
+            <span>Récupération de votre position...</span>
+        </div>
+
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+        <div id="weatherDashboard" class="dashboard-grid" style="display: none;">
+            <div class="main-weather">
+                <div class="weather-header">
+                    <div>
+                        <div class="location" id="locationName">-</div>
+                        <div class="location-info">
+                            <span>📍</span>
+                            <span id="coordinates">-</span>
+                        </div>
+                    </div>
+                    <div class="last-update" id="lastUpdate">-</div>
+                </div>
+
+                <div class="current-weather">
+                    <div class="weather-icon" id="weatherIcon">🌤️</div>
+                    <div class="temperature-info">
+                        <div class="temperature" id="temperature">--°</div>
+                        <div class="description" id="weatherDescription">-</div>
+                        <div class="feels-like" id="feelsLike">Ressenti: --°</div>
+                    </div>
+                    <div class="weather-details">
+                        <div class="detail-item">
+                            <div class="detail-label">💧 Humidité</div>
+                            <div class="detail-value" id="humidity">--%</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">🌪️ Vent</div>
+                            <div class="detail-value" id="windSpeed">-- m/s</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">📊 Pression</div>
+                            <div class="detail-value" id="pressure">-- hPa</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">👁️ Visibilité</div>
+                            <div class="detail-value" id="visibility">-- km</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sun-times">
+                    <div class="sun-time">
+                        <span>🌅</span>
+                        <span>Lever: <span id="sunrise">--:--</span></span>
+                    </div>
+                    <div class="sun-time">
+                        <span>🌇</span>
+                        <span>Coucher: <span id="sunset">--:--</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="sidebar-panel">
+                    <div class="panel-title">📈 Prévisions 5h</div>
+                    <div id="forecastContainer">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <span>Chargement...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-panel">
+                    <div class="panel-title">⚠️ Alertes Météo</div>
+                    <div class="alerts-container" id="alertsContainer">
+                        <div style="text-align: center; opacity: 0.7;">
+                            Aucune alerte pour le moment
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-panel">
+                    <div class="panel-title">📊 Statistiques</div>
+                    <div class="stats-grid" id="statsContainer">
+                        <div class="stat-item">
+                            <div class="stat-value" id="connectedUsers">0</div>
+                            <div class="stat-label">Utilisateurs connectés</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="totalRequests">0</div>
+                            <div class="stat-label">Requêtes météo</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="uptime">0s</div>
+                            <div class="stat-label">Temps de fonctionnement</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="alertsSent">0</div>
+                            <div class="stat-label">Alertes envoyées</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="notifications" id="notifications"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        let socket;
+        let userLocation = null;
+        let currentWeatherData = null;
+        let sessionID = null;
+
+        const weatherIcons = {
+            '01d': '☀️', '01n': '🌙',
+            '02d': '⛅', '02n': '☁️',
+            '03d': '☁️', '03n': '☁️',
+            '04d': '☁️', '04n': '☁️',
+            '09d': '🌧️', '09n': '🌧️',
+            '10d': '🌦️', '10n': '🌧️',
+            '11d': '⛈️', '11n': '⛈️',
+            '13d': '❄️', '13n': '❄️',
+            '50d': '🌫️', '50n': '🌫️'
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Initialisation du dashboard météo...');
+            initializeWebSocket();
+            requestUserLocation();
+        });
+
+        function initializeWebSocket() {
+            console.log('🔌 Connexion WebSocket...');
+            
+            socket = io({
+                auth: {
+                    sessionID: localStorage.getItem('weather_session_id'),
+                    username: `Météo-${Math.floor(Math.random() * 1000)}`
+                }
+            });
+
+            setupSocketListeners();
+        }
+
+        function setupSocketListeners() {
+            socket.on('connect', () => {
+                console.log('✅ Connecté au serveur météo WebSocket');
+                updateConnectionStatus(true);
+                showNotification('Connexion WebSocket établie', 'success');
+            });
+
+            socket.on('session_established', (data) => {
+                sessionID = data.sessionID;
+                localStorage.setItem('weather_session_id', sessionID);
+                document.getElementById('sessionInfo').textContent = `Session: ${sessionID.substring(0, 8)}`;
+                console.log('📱 Session météo établie:', data);
+            });
+
+            socket.on('request_location', () => {
+                console.log('📍 Serveur demande la géolocalisation');
+                requestUserLocation();
+            });
+
+            socket.on('weather_update', (weatherData) => {
+                console.log('🌤️ Données météo reçues:', weatherData);
+                currentWeatherData = weatherData;
+                updateWeatherDisplay(weatherData);
+                document.getElementById('shareBtn').disabled = false;
+            });
+
+            socket.on('forecast_update', (forecastData) => {
+                console.log('📈 Prévisions reçues:', forecastData);
+                updateForecastDisplay(forecastData);
+            });
+
+            socket.on('weather_alerts', (alerts) => {
+                console.log('⚠️ Alertes météo reçues:', alerts);
+                updateAlertsDisplay(alerts);
+                
+                alerts.forEach(alert => {
+                    showNotification(alert.title + ': ' + alert.description, alert.severity);
+                });
+            });
+
+            socket.on('system_stats', (stats) => {
+                updateStatsDisplay(stats);
+            });
+
+            socket.on('stats_update', (stats) => {
+                updateStatsDisplay(stats);
+            });
+
+            socket.on('shared_weather', (data) => {
+                showNotification(`📤 ${data.from} a partagé la météo de ${data.location}`, 'info');
+            });
+
+            socket.on('weather_error', (error) => {
+                console.error('❌ Erreur météo:', error);
+                showError(error.message);
+            });
+
+            socket.on('disconnect', (reason) => {
+                console.log('🔌 Déconnecté du serveur météo:', reason);
+                updateConnectionStatus(false);
+                showNotification('Connexion perdue', 'error');
+            });
+
+            socket.on('reconnect', () => {
+                console.log('🔄 Reconnecté au serveur météo');
+                updateConnectionStatus(true);
+                showNotification('Reconnexion réussie', 'success');
+                
+                if (userLocation) {
+                    sendLocationUpdate();
+                }
+            });
+        }
+
+        function requestUserLocation() {
+            if ('geolocation' in navigator) {
+                showLoading('Récupération de votre position...');
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lon: position.coords.longitude,
+                            accuracy: position.coords.accuracy,
+                            timestamp: Date.now()
+                        };
+                        
+                        console.log('📍 Position obtenue:', userLocation);
+                        sendLocationUpdate();
+                        hideLoading();
+                    },
+                    (error) => {
+                        console.error('❌ Erreur géolocalisation:', error);
+                        showError('Erreur de géolocalisation. Utilisation de Paris par défaut.');
+                        hideLoading();
+                        
+                        userLocation = { lat: 48.8566, lon: 2.3522 };
+                        sendLocationUpdate();
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 300000
+                    }
+                );
+            } else {
+                showError('Géolocalisation non supportée par votre navigateur');
+                hideLoading();
+                
+                userLocation = { lat: 48.8566, lon: 2.3522 };
+                sendLocationUpdate();
+            }
+        }
+
+        function sendLocationUpdate() {
+            if (socket && userLocation) {
+                console.log('📡 Envoi de la localisation au serveur:', userLocation);
+                socket.emit('location_update', userLocation);
+            }
+        }
+
+        function refreshWeather() {
+            if (socket) {
+                showLoading('Actualisation des données météo...');
+                socket.emit('refresh_weather');
+                
+                setTimeout(() => {
+                    hideLoading();
+                }, 2000);
+            }
+        }
+
+        function shareWeather() {
+            if (socket && currentWeatherData) {
+                socket.emit('share_weather', {
+                    location: currentWeatherData.location.name,
+                    weather: {
+                        temperature: currentWeatherData.current.temperature,
+                        description: currentWeatherData.current.weather.description
+                    }
+                });
+                
+                showNotification('Données météo partagées avec les autres utilisateurs', 'success');
+            }
+        }
+
+        function requestLocation() {
+            requestUserLocation();
+        }
+
+        function updateWeatherDisplay(weatherData) {
+            document.getElementById('locationName').textContent = 
+                `${weatherData.location.name}, ${weatherData.location.country}`;
+            document.getElementById('coordinates').textContent = 
+                `${weatherData.location.lat.toFixed(2)}, ${weatherData.location.lon.toFixed(2)}`;
+            
+            const updateTime = new Date(weatherData.current.timestamp).toLocaleTimeString();
+            document.getElementById('lastUpdate').textContent = `Mis à jour: ${updateTime}`;
+            
+            const iconCode = weatherData.current.weather.icon;
+            document.getElementById('weatherIcon').textContent = weatherIcons[iconCode] || '🌤️';
+            document.getElementById('temperature').textContent = `${weatherData.current.temperature}°`;
+            document.getElementById('weatherDescription').textContent = weatherData.current.weather.description;
+            document.getElementById('feelsLike').textContent = `Ressenti: ${weatherData.current.feels_like}°`;
+            
+            document.getElementById('humidity').textContent = `${weatherData.current.humidity}%`;
+            document.getElementById('windSpeed').textContent = `${weatherData.current.wind.speed} m/s`;
+            document.getElementById('pressure').textContent = `${weatherData.current.pressure} hPa`;
+            document.getElementById('visibility').textContent = `${weatherData.current.visibility} km`;
+            
+            const sunrise = new Date(weatherData.sun.sunrise).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const sunset = new Date(weatherData.sun.sunset).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            document.getElementById('sunrise').textContent = sunrise;
+            document.getElementById('sunset').textContent = sunset;
+            
+            document.getElementById('weatherDashboard').style.display = 'grid';
+        }
+
+        function updateForecastDisplay(forecastData) {
+            const container = document.getElementById('forecastContainer');
+            
+            if (forecastData && forecastData.length > 0) {
+                container.innerHTML = '';
+                
+                forecastData.forEach(item => {
+                    const forecastItem = document.createElement('div');
+                    forecastItem.className = 'forecast-item';
+                    
+                    const time = new Date(item.datetime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    const icon = weatherIcons[item.icon] || '🌤️';
+                    
+                    forecastItem.innerHTML = `
+                        <div>
+                            <div class="forecast-time">${time}</div>
+                            <div style="font-size: 12px; opacity: 0.8;">${item.description}</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span>${icon}</span>
+                            <span class="forecast-temp">${item.temperature}°</span>
+                        </div>
+                    `;
+                    
+                    container.appendChild(forecastItem);
+                });
+            }
+        }
+
+        function updateAlertsDisplay(alerts) {
+            const container = document.getElementById('alertsContainer');
+            
+            if (alerts && alerts.length > 0) {
+                container.innerHTML = '';
+                
+                alerts.forEach(alert => {
+                    const alertItem = document.createElement('div');
+                    alertItem.className = `alert-item ${alert.severity}`;
+                    
+                    const time = new Date(alert.timestamp).toLocaleTimeString();
+                    
+                    alertItem.innerHTML = `
+                        <div class="alert-title">${alert.title}</div>
+                        <div class="alert-description">${alert.description}</div>
+                        <div style="font-size: 12px; opacity: 0.7; margin-top: 5px;">${time}</div>
+                    `;
+                    
+                    container.appendChild(alertItem);
+                });
+            } else {
+                container.innerHTML = '<div style="text-align: center; opacity: 0.7;">Aucune alerte pour le moment</div>';
+            }
+        }
+
+        function updateStatsDisplay(stats) {
+            if (stats.connectedUsers !== undefined) {
+                document.getElementById('connectedUsers').textContent = stats.connectedUsers;
+            }
+            if (stats.totalWeatherRequests !== undefined) {
+                document.getElementById('totalRequests').textContent = stats.totalWeatherRequests;
+            }
+            if (stats.alertsSent !== undefined) {
+                document.getElementById('alertsSent').textContent = stats.alertsSent;
+            }
+            if (stats.uptime !== undefined) {
+                document.getElementById('uptime').textContent = formatUptime(stats.uptime);
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('connectionStatus');
+            
+            if (connected) {
+                statusDot.classList.remove('disconnected');
+                statusText.textContent = 'Connecté';
+            } else {
+                statusDot.classList.add('disconnected');
+                statusText.textContent = 'Déconnecté';
+            }
+        }
+
+        function showLoading(message) {
+            const loadingEl = document.getElementById('loadingMessage');
+            loadingEl.querySelector('span').textContent = message;
+            loadingEl.style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingMessage').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('errorMessage');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            
+            setTimeout(() => {
+                errorEl.style.display = 'none';
+            }, 8000);
+        }
+
+        function showNotification(message, type = 'info') {
+            const notificationsContainer = document.getElementById('notifications');
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            
+            const time = new Date().toLocaleTimeString();
+            notification.innerHTML = `
+                <div style="font-weight: 600; margin-bottom: 5px;">${message}</div>
+                <div style="font-size: 12px; opacity: 0.7;">${time}</div>
+            `;
+            
+            notificationsContainer.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+            
+            const notifications = notificationsContainer.children;
+            if (notifications.length > 5) {
+                notifications[0].remove();
+            }
+        }
+
+        function formatUptime(uptime) {
+            const seconds = Math.floor(uptime / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes % 60}m`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${seconds % 60}s`;
+            } else {
+                return `${seconds}s`;
+            }
+        }
+    </script>
+</body>
+</html>

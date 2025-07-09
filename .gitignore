@@ -1,0 +1,9 @@
+# Votre clé API OpenWeatherMap
+WEATHER_API_KEY=VOTRE_CLE_API_ICI
+
+# Configuration serveur
+PORT=3000
+NODE_ENV=development
+
+# Configuration WebSocket
+WEBSOCKET_CORS_ORIGIN=*

@@ -1,7 +1,7 @@
 {
   "name": "weather-dashboard-websocket",
   "version": "1.0.0",
-  "description": "Tableau de bord météo en temps réel avec WebSockets",
+  "description": "Tableau de bord météo en temps réel avec WebSockets et Socket.IO",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -13,7 +13,9 @@
     "weather",
     "realtime",
     "dashboard",
-    "socketio"
+    "socketio",
+    "nodejs",
+    "express"
   ],
   "author": "Votre Nom",
   "license": "MIT",
@@ -30,6 +32,15 @@
     "nodemon": "^3.0.1"
   },
   "engines": {
-    "node": ">=16.0.0"
-  }
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/votre-username/weather-dashboard-websocket.git"
+  },
+  "bugs": {
+    "url": "https://github.com/votre-username/weather-dashboard-websocket/issues"
+  },
+  "homepage": "https://github.com/votre-username/weather-dashboard-websocket#readme"
 }
