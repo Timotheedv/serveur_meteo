@@ -283,6 +283,19 @@ io.on('connection', (socket) => {
     connectedAt: Date.now()
   });
 
+  // Partage de position sur la carte
+socket.on('share_map_location', (locationData) => {
+  console.log(`🗺️ Position partagée par ${socket.username}`);
+  
+  socket.broadcast.emit('shared_map_location', {
+    lat: locationData.lat,
+    lon: locationData.lon,
+    username: socket.username,
+    socketId: socket.id,
+    timestamp: Date.now()
+  });
+});
+
   // Envoyer les infos de session
   socket.emit('session_established', {
     sessionID: socket.sessionID,
@@ -394,6 +407,17 @@ io.on('connection', (socket) => {
       totalConnections: systemStats.totalConnections,
       totalWeatherRequests: systemStats.totalWeatherRequests
     });
+
+    socket.on('disconnect', (reason) => {
+  // ... code existant ...
+  
+  socket.broadcast.emit('user_disconnected', {
+    username: socket.username,
+    socketId: socket.id,
+    reason: reason,
+    timestamp: Date.now()
+  });
+});
   });
 });
 
@@ -468,3 +492,4 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Promesse rejetée:', reason);
 });
+

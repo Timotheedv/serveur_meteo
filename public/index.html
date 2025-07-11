@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🌤️ Dashboard Météo Live - WebSocket</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * {
             margin: 0;
@@ -876,6 +880,355 @@
                 return `${seconds}s`;
             }
         }
+        
     </script>
+
+    <!-- À ajouter dans votre HTML après les controls -->
+<div class="map-section" style="margin-bottom: 20px;">
+    <div class="sidebar-panel" style="width: 100%;">
+        <div class="panel-title">🗺️ Carte Météo Interactive</div>
+        <div class="map-controls" style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn" onclick="toggleMap()" id="mapToggleBtn">
+                📍 Afficher la carte
+            </button>
+            <button class="btn" onclick="shareLocation()" id="shareLocationBtn" disabled>
+                📤 Partager ma position
+            </button>
+            <select id="mapStyle" class="room-selector" onchange="changeMapStyle()">
+                <option value="street">🏙️ Rue</option>
+                <option value="satellite">🛰️ Satellite</option>
+                <option value="terrain">⛰️ Terrain</option>
+            </select>
+            <span class="stat-value" id="mapUsers" style="color: white;">0 utilisateurs</span>
+        </div>
+        <div id="weatherMap" style="height: 400px; border-radius: 10px; display: none; border: 1px solid rgba(255,255,255,0.2);"></div>
+        <div id="mapLegend" style="display: none; margin-top: 10px; font-size: 12px; opacity: 0.8;">
+            <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                <span>🔵 Vous</span>
+                <span>🟢 Autres utilisateurs</span>
+                <span>🌡️ Cliquez pour voir la météo</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Styles pour la carte */
+.leaflet-popup-content {
+    color: #333 !important;
+    font-family: 'Segoe UI', sans-serif !important;
+    min-width: 200px;
+}
+
+.weather-popup {
+    text-align: center;
+    padding: 10px;
+}
+
+.weather-popup .temp {
+    font-size: 24px;
+    font-weight: bold;
+    color: #2980b9;
+}
+
+.weather-popup .desc {
+    font-size: 14px;
+    margin: 5px 0;
+    text-transform: capitalize;
+}
+
+.weather-popup .details {
+    font-size: 12px;
+    opacity: 0.8;
+    margin-top: 8px;
+}
+
+.user-marker {
+    background: #3498db;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.current-user-marker {
+    background: #e74c3c;
+    animation: pulse-marker 2s infinite;
+}
+
+@keyframes pulse-marker {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+</style>
+
+<script>
+// Variables globales pour la carte
+let weatherMap = null;
+let mapVisible = false;
+let userMarkers = new Map();
+let currentUserMarker = null;
+
+// Initialisation de la carte
+function initializeMap() {
+    if (weatherMap) return;
+    
+    weatherMap = L.map('weatherMap').setView([48.8566, 2.3522], 6);
+    
+    // Couche de base
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(weatherMap);
+    
+    // Clic sur la carte pour obtenir météo
+    weatherMap.on('click', onMapClick);
+    
+    console.log('🗺️ Carte météo initialisée');
+}
+
+function toggleMap() {
+    const mapContainer = document.getElementById('weatherMap');
+    const mapLegend = document.getElementById('mapLegend');
+    const toggleBtn = document.getElementById('mapToggleBtn');
+    
+    if (!mapVisible) {
+        // Afficher la carte
+        mapContainer.style.display = 'block';
+        mapLegend.style.display = 'block';
+        toggleBtn.textContent = '📍 Masquer la carte';
+        
+        if (!weatherMap) {
+            initializeMap();
+        }
+        
+        // Redimensionner après affichage
+        setTimeout(() => {
+            weatherMap.invalidateSize();
+            if (userLocation) {
+                addCurrentUserMarker();
+            }
+        }, 100);
+        
+        mapVisible = true;
+        document.getElementById('shareLocationBtn').disabled = false;
+    } else {
+        // Masquer la carte
+        mapContainer.style.display = 'none';
+        mapLegend.style.display = 'none';
+        toggleBtn.textContent = '📍 Afficher la carte';
+        mapVisible = false;
+        document.getElementById('shareLocationBtn').disabled = true;
+    }
+}
+
+function changeMapStyle() {
+    if (!weatherMap) return;
+    
+    const style = document.getElementById('mapStyle').value;
+    
+    // Supprimer les couches existantes
+    weatherMap.eachLayer((layer) => {
+        if (layer instanceof L.TileLayer) {
+            weatherMap.removeLayer(layer);
+        }
+    });
+    
+    let tileUrl;
+    switch(style) {
+        case 'satellite':
+            tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+            break;
+        case 'terrain':
+            tileUrl = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
+            break;
+        default:
+            tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    }
+    
+    L.tileLayer(tileUrl, {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(weatherMap);
+}
+
+// Clic sur la carte
+async function onMapClick(e) {
+    const lat = e.latlng.lat.toFixed(4);
+    const lon = e.latlng.lng.toFixed(4);
+    
+    showLoading('Récupération météo...');
+    
+    try {
+        // Demander la météo au serveur
+        const response = await fetch(`/api/weather/current/${lat}/${lon}`);
+        const weatherData = await response.json();
+        
+        hideLoading();
+        
+        // Créer popup météo
+        const popupContent = `
+            <div class="weather-popup">
+                <div style="font-weight: bold; margin-bottom: 8px;">
+                    📍 ${weatherData.location.name}, ${weatherData.location.country}
+                </div>
+                <div class="temp">${weatherData.current.temperature}°C</div>
+                <div class="desc">${weatherData.current.weather.description}</div>
+                <div class="details">
+                    💧 ${weatherData.current.humidity}% | 
+                    🌪️ ${weatherData.current.wind.speed} m/s | 
+                    📊 ${weatherData.current.pressure} hPa
+                </div>
+                <button onclick="useThisLocation(${lat}, ${lon})" 
+                        style="margin-top: 10px; padding: 5px 10px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    🎯 Utiliser cette position
+                </button>
+            </div>
+        `;
+        
+        L.popup()
+            .setLatLng(e.latlng)
+            .setContent(popupContent)
+            .openOn(weatherMap);
+            
+    } catch (error) {
+        hideLoading();
+        showError('Impossible de récupérer la météo pour cette position');
+    }
+}
+
+// Utiliser une nouvelle position
+function useThisLocation(lat, lon) {
+    userLocation = { lat: parseFloat(lat), lon: parseFloat(lon) };
+    sendLocationUpdate();
+    weatherMap.closePopup();
+    showNotification('📍 Position mise à jour', 'success');
+}
+
+// Ajouter marqueur utilisateur actuel
+function addCurrentUserMarker() {
+    if (!weatherMap || !userLocation) return;
+    
+    // Supprimer marqueur existant
+    if (currentUserMarker) {
+        weatherMap.removeLayer(currentUserMarker);
+    }
+    
+    // Créer nouveau marqueur
+    const marker = L.circleMarker([userLocation.lat, userLocation.lon], {
+        radius: 10,
+        fillColor: '#e74c3c',
+        color: 'white',
+        weight: 3,
+        opacity: 1,
+        fillOpacity: 0.8,
+        className: 'current-user-marker'
+    }).addTo(weatherMap);
+    
+    marker.bindPopup(`
+        <div class="weather-popup">
+            <div style="font-weight: bold;">📍 Votre position</div>
+            <div style="font-size: 12px; margin-top: 5px;">
+                ${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}
+            </div>
+        </div>
+    `);
+    
+    currentUserMarker = marker;
+    
+    // Centrer la carte
+    weatherMap.setView([userLocation.lat, userLocation.lon], 10);
+}
+
+// Partager position sur la carte
+function shareLocation() {
+    if (!socket || !userLocation) return;
+    
+    socket.emit('share_map_location', {
+        lat: userLocation.lat,
+        lon: userLocation.lon,
+        username: socket.username || 'Utilisateur'
+    });
+    
+    showNotification('📍 Position partagée sur la carte', 'success');
+}
+
+// Ajouter marqueur d'autres utilisateurs
+function addUserMarker(userData) {
+    if (!weatherMap) return;
+    
+    const { lat, lon, username, socketId } = userData;
+    
+    // Supprimer marqueur existant si présent
+    if (userMarkers.has(socketId)) {
+        weatherMap.removeLayer(userMarkers.get(socketId));
+    }
+    
+    const marker = L.circleMarker([lat, lon], {
+        radius: 8,
+        fillColor: '#2ecc71',
+        color: 'white',
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.8
+    }).addTo(weatherMap);
+    
+    marker.bindPopup(`
+        <div class="weather-popup">
+            <div style="font-weight: bold;">👤 ${username}</div>
+            <div style="font-size: 12px; margin-top: 5px;">
+                Position partagée
+            </div>
+        </div>
+    `);
+    
+    userMarkers.set(socketId, marker);
+    updateMapUsersCount();
+}
+
+// Supprimer marqueur utilisateur
+function removeUserMarker(socketId) {
+    if (userMarkers.has(socketId)) {
+        weatherMap.removeLayer(userMarkers.get(socketId));
+        userMarkers.delete(socketId);
+        updateMapUsersCount();
+    }
+}
+
+// Mettre à jour compteur utilisateurs carte
+function updateMapUsersCount() {
+    document.getElementById('mapUsers').textContent = `${userMarkers.size} utilisateur${userMarkers.size > 1 ? 's' : ''}`;
+}
+
+// Étendre les événements Socket.IO existants
+const originalSetupSocketListeners = setupSocketListeners;
+setupSocketListeners = function() {
+    originalSetupSocketListeners();
+    
+    // Position partagée reçue
+    socket.on('shared_map_location', (data) => {
+        addUserMarker(data);
+        showNotification(`📍 ${data.username} a partagé sa position`, 'info');
+    });
+    
+    // Utilisateur déconnecté
+    socket.on('user_disconnected', (data) => {
+        removeUserMarker(data.socketId);
+    });
+};
+
+// Étendre la fonction de mise à jour de localisation
+const originalSendLocationUpdate = sendLocationUpdate;
+sendLocationUpdate = function() {
+    originalSendLocationUpdate();
+    
+    // Ajouter marqueur si carte visible
+    if (mapVisible && weatherMap) {
+        setTimeout(() => {
+            addCurrentUserMarker();
+        }, 500);
+    }
+};
+</script>
 </body>
 </html>
