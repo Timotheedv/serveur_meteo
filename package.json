@@ -37,10 +37,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/votre-username/weather-dashboard-websocket.git"
+    "url": "https://github.com/Timotheedv/serveur_meteo.git"
   },
   "bugs": {
-    "url": "https://github.com/votre-username/weather-dashboard-websocket/issues"
+    "url": "https://github.com/Timotheedv/serveur_meteo.git"
   },
-  "homepage": "https://github.com/votre-username/weather-dashboard-websocket#readme"
+  "homepage": "https://github.com/Timotheedv/serveur_meteo.git"
 }
